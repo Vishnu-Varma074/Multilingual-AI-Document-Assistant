@@ -1,19 +1,141 @@
+# # rag.py
+# import os
+# import tempfile
+# from langchain_community.document_loaders import PyPDFLoader, TextLoader
+# from langchain_text_splitters import RecursiveCharacterTextSplitter
+# from langchain_huggingface import HuggingFaceEmbeddings
+# from langchain_community.vectorstores import FAISS
+# from langchain_groq import ChatGroq
+# from langchain_core.prompts import ChatPromptTemplate
+
+# # ✅ Correct imports for LangChain 1.0+ (using langchain-classic)
+# from langchain_classic.chains.combine_documents import create_stuff_documents_chain
+# from langchain_classic.chains import create_retrieval_chain
+
+# # ------------------ DOCUMENT PROCESSING ------------------
+# def process_documents(files):
+#     all_docs = []
+#     doc_map = {}
+
+#     temp_dir = tempfile.mkdtemp()
+
+#     for uploaded_file in files:
+#         temp_path = os.path.join(temp_dir, uploaded_file.name)
+#         with open(temp_path, "wb") as f:
+#             f.write(uploaded_file.getbuffer())
+
+#         if uploaded_file.name.lower().endswith(".pdf"):
+#             loader = PyPDFLoader(temp_path)
+#         else:
+#             loader = TextLoader(temp_path, encoding="utf-8")
+
+#         docs = loader.load()
+
+#         for doc in docs:
+#             doc.metadata["source"] = uploaded_file.name
+
+#         doc_map[uploaded_file.name] = docs
+#         all_docs.extend(docs)
+
+#     splitter = RecursiveCharacterTextSplitter(chunk_size=1500, chunk_overlap=300)
+#     splits = splitter.split_documents(all_docs)
+
+#     embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+#     vectorstore = FAISS.from_documents(splits, embeddings)
+
+#     return vectorstore, doc_map
+
+
+# # ------------------ LLM ------------------
+# def get_llm():
+#     return ChatGroq(
+#         model="llama-3.1-8b-instant",
+#         temperature=0,
+#         max_tokens=1024
+#     )
+
+
+# # ------------------ AUTOMATIC PROMPT ------------------
+# def get_prompt_auto(query: str):
+#     query_lower = query.lower()
+
+#     if "summarize" in query_lower or "summary" in query_lower:
+#         template = """
+# You are an expert summarizer. Summarize the following document concisely and clearly.
+
+# Document:
+# {context}
+
+# Summary:
+# """
+#     elif "translate" in query_lower:
+#         target_language = "English"
+#         if any(word in query_lower for word in ["hindi", "हिंदी"]):
+#             target_language = "Hindi"
+#         elif any(word in query_lower for word in ["telugu", "తెలుగు"]):
+#             target_language = "Telugu"
+
+#         template = f"""
+# Translate the following document into clear and natural {target_language}.
+
+# Document:
+# {{context}}
+
+# Translation:
+# """
+#     else:
+#         template = """
+# Answer the question based only on the provided document. Be clear, concise and accurate.
+
+# Document:
+# {context}
+
+# Question: {input}
+# Answer:
+# """
+
+#     return ChatPromptTemplate.from_template(template)
+
+
+# # ------------------ QUERY RAG ------------------
+# def query_rag(vectorstore, query: str, llm, selected_docs=None):
+#     search_kwargs = {"k": 6}
+#     if selected_docs and len(selected_docs) > 0:
+#         search_kwargs["filter"] = {"source": {"$in": selected_docs}}
+
+#     retriever = vectorstore.as_retriever(search_kwargs=search_kwargs)
+
+#     prompt = get_prompt_auto(query)
+
+#     # Create the chains
+#     document_chain = create_stuff_documents_chain(llm, prompt)
+#     retrieval_chain = create_retrieval_chain(retriever, document_chain)
+
+#     # Important: pass "input" key
+#     response = retrieval_chain.invoke({"input": query})
+
+#     return response["answer"]
+
+# rag.py
 import os
 import tempfile
+import re
 from langchain_community.document_loaders import PyPDFLoader, TextLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
 from langchain_groq import ChatGroq
 from langchain_core.prompts import ChatPromptTemplate
+
+# Correct imports for LangChain 1.0+
 from langchain_classic.chains.combine_documents import create_stuff_documents_chain
 from langchain_classic.chains import create_retrieval_chain
 
-
+# ------------------ DOCUMENT PROCESSING ------------------
 def process_documents(files):
-    """Load, split, and embed documents"""
     all_docs = []
     doc_map = {}
+
     temp_dir = tempfile.mkdtemp()
 
     for uploaded_file in files:
@@ -21,11 +143,15 @@ def process_documents(files):
         with open(temp_path, "wb") as f:
             f.write(uploaded_file.getbuffer())
 
-        loader = PyPDFLoader(temp_path) if uploaded_file.name.endswith(".pdf") else TextLoader(temp_path)
+        if uploaded_file.name.lower().endswith(".pdf"):
+            loader = PyPDFLoader(temp_path)
+        else:
+            loader = TextLoader(temp_path, encoding="utf-8")
+
         docs = loader.load()
 
-        for d in docs:
-            d.metadata["source"] = uploaded_file.name
+        for doc in docs:
+            doc.metadata["source"] = uploaded_file.name
 
         doc_map[uploaded_file.name] = docs
         all_docs.extend(docs)
@@ -33,51 +159,96 @@ def process_documents(files):
     splitter = RecursiveCharacterTextSplitter(chunk_size=1500, chunk_overlap=300)
     splits = splitter.split_documents(all_docs)
 
-    embeddings = HuggingFaceEmbeddings()
+    embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
     vectorstore = FAISS.from_documents(splits, embeddings)
 
     return vectorstore, doc_map
 
 
-def get_prompt_template():
-    """Return the ChatPromptTemplate"""
-    return ChatPromptTemplate.from_template("""
-Answer ONLY from context.
-If not found say: I don't have enough information in the provided documents.
-Context:
-{context}
-Question:
-{input}
-Answer:
-""")
-
-
+# ------------------ LLM ------------------
 def get_llm():
-    """Return ChatGroq LLM instance"""
-    return ChatGroq(model="llama-3.1-8b-instant", temperature=0)
+    return ChatGroq(
+        model="llama-3.1-8b-instant",
+        temperature=0,
+        max_tokens=1200
+    )
 
 
-def create_filtered_retriever(vectorstore, selected_docs=None, k=5):
-    """Return a filtered retriever if selected_docs is provided"""
-    if selected_docs:
-        return vectorstore.as_retriever(search_kwargs={"k": k, "filter": {"source": {"$in": selected_docs}}})
-    return vectorstore.as_retriever(search_kwargs={"k": k})
+# ------------------ IMPROVED PROMPT FOR TRANSLATION ------------------
+def get_prompt_auto(query: str):
+    query_lower = query.lower()
+
+    # Detect translation request
+    translate_match = re.search(r'translate.*?(?:to|into)\s+([a-zA-Z]+)', query_lower)
+    target_lang = None
+    if translate_match:
+        target_lang = translate_match.group(1).capitalize()
+
+    if target_lang:
+        # Check if user wants only a specific section / word / sentence
+        if any(word in query_lower for word in ["section", "paragraph", "part", "about", "definition of", "the word", "the sentence", "following"]):
+            template = f"""
+The user wants to translate a **specific section, paragraph, word or sentence** from the document into **{target_lang}**.
+
+First, identify the most relevant part(s) from the provided context that match the user's request.
+Then, translate **only that specific part** clearly and naturally into {target_lang}.
+Keep the original meaning and tone. Do not translate the entire document unless specifically asked.
+
+Context:
+{{context}}
+
+User Request: {{input}}
+
+Translation of the requested section:
+"""
+        else:
+            # General translation of relevant content
+            template = f"""
+Translate the relevant content from the document into clear and natural **{target_lang}**.
+
+Context:
+{{context}}
+
+User Request: {{input}}
+
+Translation:
+"""
+    elif "summarize" in query_lower or "summary" in query_lower:
+        template = """
+You are an expert summarizer. Provide a concise and clear summary.
+
+Document:
+{context}
+
+Summary:
+"""
+    else:
+        template = """
+Answer the question based only on the provided document. Be clear, concise and accurate.
+
+Document:
+{context}
+
+Question: {input}
+Answer:
+"""
+
+    return ChatPromptTemplate.from_template(template)
 
 
-def query_rag(vectorstore, query, llm, selected_docs=None):
-    """Query RAG using retrieval chain"""
-    retriever = create_filtered_retriever(vectorstore, selected_docs)
-    chain = create_retrieval_chain(retriever, create_stuff_documents_chain(llm, get_prompt_template()))
-    response = chain.invoke({"input": query})
+# ------------------ QUERY RAG ------------------
+def query_rag(vectorstore, query: str, llm, selected_docs=None):
+    search_kwargs = {"k": 8}   # Increased a bit for better section retrieval
+    if selected_docs and len(selected_docs) > 0:
+        search_kwargs["filter"] = {"source": {"$in": selected_docs}}
+
+    retriever = vectorstore.as_retriever(search_kwargs=search_kwargs)
+
+    prompt = get_prompt_auto(query)
+
+    document_chain = create_stuff_documents_chain(llm, prompt)
+    retrieval_chain = create_retrieval_chain(retriever, document_chain)
+
+    response = retrieval_chain.invoke({"input": query})
+
     return response["answer"]
-
-
-def summarize_document(llm, docs):
-    """Summarize full document content in Telugu (example)"""
-    full_text = "\n".join([d.page_content for d in docs])
-    return llm.invoke(f"""
-Summarize this document in Telugu in 3 lines:
-
-Content:
-{full_text}
-""").content
