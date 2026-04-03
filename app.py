@@ -1,4 +1,3 @@
-# app.py
 import streamlit as st
 import os
 from dotenv import load_dotenv
@@ -79,11 +78,6 @@ if "vectorstore" in st.session_state:
                 
                 st.markdown("### 📝 Answer")
                 st.markdown(answer)
-                
-                # Optional: Show sources (basic version)
-                with st.expander("📚 View Retrieved Sources"):
-                    # This is a simple placeholder - you can enhance it later
-                    st.info("Source display coming in next improvement...")
                     
             except Exception as e:
                 st.error(f"Error generating answer: {str(e)}")
