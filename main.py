@@ -5,6 +5,7 @@ Multilingual AI Document Assistant powered by Groq + LangChain
 
 import os
 import uuid
+import uvicorn
 import shutil
 from typing import Optional, List
 from contextlib import asynccontextmanager
@@ -249,3 +250,6 @@ async def query_endpoint(
         )
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Error generating answer: {str(exc)}")
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run("main:app", host="0.0.0.0", port=port)
