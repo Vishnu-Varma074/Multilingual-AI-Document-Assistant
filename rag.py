@@ -10,10 +10,16 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_classic.chains.combine_documents import create_stuff_documents_chain
 from langchain_classic.chains import create_retrieval_chain
 
-# ------------------ SINGLETON EMBEDDINGS (loaded once at startup) ------------------
-print("Loading embedding model...")
-embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
-print("Embedding model loaded successfully.")
+# ------------------ LAZY EMBEDDINGS ------------------
+_embeddings = None
+
+def get_embeddings():
+    global _embeddings
+    if _embeddings is None:
+        print("Loading embedding model...")
+        _embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+        print("Embedding model loaded.")
+    return _embeddings
 
 
 # ------------------ DOCUMENT PROCESSING ------------------
@@ -44,7 +50,7 @@ def process_documents(files):
     splitter = RecursiveCharacterTextSplitter(chunk_size=1500, chunk_overlap=300)
     splits = splitter.split_documents(all_docs)
 
-    vectorstore = FAISS.from_documents(splits, embeddings)  # uses singleton
+    vectorstore = FAISS.from_documents(splits, get_embeddings())  # lazy load
 
     return vectorstore, doc_map
 
