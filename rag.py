@@ -7,10 +7,14 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
 from langchain_groq import ChatGroq
 from langchain_core.prompts import ChatPromptTemplate
-
-# Correct imports for LangChain 1.0+
 from langchain_classic.chains.combine_documents import create_stuff_documents_chain
 from langchain_classic.chains import create_retrieval_chain
+
+# ------------------ SINGLETON EMBEDDINGS (loaded once at startup) ------------------
+print("Loading embedding model...")
+embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+print("Embedding model loaded successfully.")
+
 
 # ------------------ DOCUMENT PROCESSING ------------------
 def process_documents(files):
@@ -40,8 +44,7 @@ def process_documents(files):
     splitter = RecursiveCharacterTextSplitter(chunk_size=1500, chunk_overlap=300)
     splits = splitter.split_documents(all_docs)
 
-    embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
-    vectorstore = FAISS.from_documents(splits, embeddings)
+    vectorstore = FAISS.from_documents(splits, embeddings)  # uses singleton
 
     return vectorstore, doc_map
 
@@ -55,18 +58,16 @@ def get_llm():
     )
 
 
-# ------------------ IMPROVED PROMPT FOR TRANSLATION ------------------
+# ------------------ PROMPT ------------------
 def get_prompt_auto(query: str):
     query_lower = query.lower()
 
-    # Detect translation request
     translate_match = re.search(r'translate.*?(?:to|into)\s+([a-zA-Z]+)', query_lower)
     target_lang = None
     if translate_match:
         target_lang = translate_match.group(1).capitalize()
 
     if target_lang:
-        # Check if user wants only a specific section / word / sentence
         if any(word in query_lower for word in ["section", "paragraph", "part", "about", "definition of", "the word", "the sentence", "following"]):
             template = f"""
 The user wants to translate a **specific section, paragraph, word or sentence** from the document into **{target_lang}**.
@@ -83,7 +84,6 @@ User Request: {{input}}
 Translation of the requested section:
 """
         else:
-            # General translation of relevant content
             template = f"""
 Translate the relevant content from the document into clear and natural **{target_lang}**.
 
@@ -119,12 +119,11 @@ Answer:
 
 # ------------------ QUERY RAG ------------------
 def query_rag(vectorstore, query: str, llm, selected_docs=None):
-    search_kwargs = {"k": 8}   # Increased a bit for better section retrieval
+    search_kwargs = {"k": 8}
     if selected_docs and len(selected_docs) > 0:
         search_kwargs["filter"] = {"source": {"$in": selected_docs}}
 
     retriever = vectorstore.as_retriever(search_kwargs=search_kwargs)
-
     prompt = get_prompt_auto(query)
 
     document_chain = create_stuff_documents_chain(llm, prompt)
