@@ -10,3 +10,4 @@ langchain-classic
 faiss-cpu
 pypdf
 sentence-transformers
+uvicorn
