@@ -1,5 +1,9 @@
+# Core Framework
 streamlit
-python-dotenv
+fastapi
+uvicorn[standard]
+
+# LangChain & Dependencies
 langchain
 langchain-community
 langchain-core
@@ -7,10 +11,15 @@ langchain-text-splitters
 langchain-huggingface
 langchain-groq
 langchain-classic
-faiss-cpu
+
+# Document Loading & Vector Store
 pypdf
+faiss-cpu
+
+# Embeddings
 sentence-transformers
-uvicorn
-fastapi
-python-multipart>=0.0.9
+
+# Utilities
+python-dotenv
+python-multipart
 pydantic>=2.7.0
