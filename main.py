@@ -24,7 +24,6 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 # ---------------------------------------------------------------------------
 # Streamlit-compatible file wrapper
-# rag.py uses uploaded_file.name and uploaded_file.getbuffer()
 # ---------------------------------------------------------------------------
 class NamedFile:
     def __init__(self, fpath: str, fname: str):
@@ -250,6 +249,11 @@ async def query_endpoint(
         )
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Error generating answer: {str(exc)}")
+
+
+# ---------------------------------------------------------------------------
+# Entry point
+# ---------------------------------------------------------------------------
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8000))
     uvicorn.run("main:app", host="0.0.0.0", port=port)
